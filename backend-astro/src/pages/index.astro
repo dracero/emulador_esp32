@@ -1,0 +1,724 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { connectToDatabase } from '../lib/mongodb';
+
+// Definir interfaz del registro
+interface Registro {
+  _id?: any;
+  peso: number;
+  estatura: number;
+  dni: string;
+  edad: number;
+  timestamp: Date;
+}
+
+let records: Registro[] = [];
+let errorMsg: string | null = null;
+let stats = {
+  total: 0,
+  avgWeight: 0,
+  avgHeight: 0,
+  avgBmi: 0
+};
+
+try {
+  const { db } = await connectToDatabase();
+  const dbRecords = await db
+    .collection('registros')
+    .find({})
+    .sort({ timestamp: -1 })
+    .toArray();
+  
+  records = dbRecords.map(r => ({
+    _id: r._id,
+    peso: Number(r.peso),
+    estatura: Number(r.estatura),
+    dni: String(r.dni),
+    edad: Number(r.edad),
+    timestamp: new Date(r.timestamp)
+  }));
+
+  // Calcular estadísticas básicas
+  if (records.length > 0) {
+    stats.total = records.length;
+    
+    let sumWeight = 0;
+    let sumHeight = 0;
+    let sumBmi = 0;
+    
+    records.forEach(r => {
+      sumWeight += r.peso;
+      sumHeight += r.estatura;
+      const bmi = r.peso / (r.estatura * r.estatura);
+      sumBmi += bmi;
+    });
+
+    stats.avgWeight = Math.round((sumWeight / records.length) * 10) / 10;
+    stats.avgHeight = Math.round((sumHeight / records.length) * 100) / 100;
+    stats.avgBmi = Math.round((sumBmi / records.length) * 10) / 10;
+  }
+} catch (e: any) {
+  errorMsg = e.message;
+}
+
+function getBmiInfo(bmi: number) {
+  if (bmi < 18.5) return { text: 'Bajo Peso', class: 'badge-under' };
+  if (bmi < 25) return { text: 'Normal', class: 'badge-normal' };
+  if (bmi < 30) return { text: 'Sobrepeso', class: 'badge-over' };
+  return { text: 'Obesidad', class: 'badge-obese' };
+}
+---
+
+<Layout title="Control de Salud - Dashboard">
+  <main class="dashboard-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-content">
+        <div class="logo-container">
+          <div class="logo-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" class="svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+            </svg>
+          </div>
+          <div class="logo-text">
+            <h1>Control de Salud</h1>
+            <p>Emulador ESP32 & App Móvil</p>
+          </div>
+        </div>
+        
+        <div class="controls-container">
+          <div class="status-badge">
+            <span class="status-dot"></span>
+            <span class="status-text" id="status-text">Escuchando</span>
+          </div>
+          <button id="refresh-btn" class="btn-refresh" title="Actualizar">
+            <svg xmlns="http://www.w3.org/2000/svg" class="svg-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 1121.21 8H17" />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Body -->
+    <div class="dashboard-body">
+      {errorMsg && (
+        <div class="error-banner">
+          <svg xmlns="http://www.w3.org/2000/svg" class="error-icon" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+          </svg>
+          <div class="error-content">
+            <p class="error-title">Error de conexión a la base de datos Atlas</p>
+            <p class="error-desc">{errorMsg}</p>
+          </div>
+        </div>
+      )}
+
+      <!-- Stats Grid -->
+      <section class="stats-grid">
+        <!-- Card 1 -->
+        <div class="stat-card">
+          <div class="stat-icon-bg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+            </svg>
+          </div>
+          <span class="stat-title">Pacientes Registrados</span>
+          <p class="stat-value" id="stat-total">{stats.total}</p>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="stat-card">
+          <div class="stat-icon-bg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18m0-18h8m-8 0H4m8 18h8m-8 0H4m4-9h8" />
+            </svg>
+          </div>
+          <span class="stat-title">Peso Promedio</span>
+          <p class="stat-value" id="stat-weight">{stats.avgWeight} <span class="stat-unit">kg</span></p>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="stat-card">
+          <div class="stat-icon-bg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 9l3-3m0 0l3 3m-3-3v12" />
+            </svg>
+          </div>
+          <span class="stat-title">Estatura Promedio</span>
+          <p class="stat-value" id="stat-height">{stats.avgHeight} <span class="stat-unit">m</span></p>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="stat-card">
+          <div class="stat-icon-bg">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6a7.5 7.5 0 1 0 7.5 7.5h-7.5V6Z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 10.5H21A7.5 7.5 0 0 0 13.5 3v7.5Z" />
+            </svg>
+          </div>
+          <span class="stat-title">IMC Promedio</span>
+          <p class="stat-value" id="stat-bmi">{stats.avgBmi}</p>
+        </div>
+      </section>
+
+      <!-- Records Table -->
+      <section class="records-section">
+        <div class="section-header">
+          <h2 class="section-title">Registros Recientes</h2>
+          <p class="section-subtitle">Datos actualizados en tiempo real mediante sincronización con el celular.</p>
+        </div>
+        
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>DNI</th>
+                <th>Edad</th>
+                <th>Peso</th>
+                <th>Estatura</th>
+                <th>IMC / Diagnóstico</th>
+                <th style="text-align: right;">Fecha y Hora</th>
+              </tr>
+            </thead>
+            <tbody id="records-tbody">
+              {records.length === 0 ? (
+                <tr>
+                  <td colspan="6" class="no-records-msg">
+                    No hay registros en la base de datos. ¡Envía datos desde el celular!
+                  </td>
+                </tr>
+              ) : (
+                records.map(r => {
+                  const bmi = r.peso / (r.estatura * r.estatura);
+                  const bmiInfo = getBmiInfo(bmi);
+                  return (
+                    <tr>
+                      <td class="font-dni">{r.dni}</td>
+                      <td>{r.edad} años</td>
+                      <td>{r.peso} kg</td>
+                      <td>{r.estatura} m</td>
+                      <td>
+                        <div class="bmi-badge-container">
+                          <span class="bmi-val">{bmi.toFixed(1)}</span>
+                          <span class={`badge ${bmiInfo.class}`}>
+                            {bmiInfo.text}
+                          </span>
+                        </div>
+                      </td>
+                      <td class="font-date">
+                        {r.timestamp.toLocaleString('es-ES', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                          second: '2-digit'
+                        })}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+</Layout>
+
+<style>
+  /* Contenedores Principales */
+  .dashboard-container {
+    min-height: 100vh;
+    padding-bottom: 4rem;
+    background: radial-gradient(circle at top, #0f172a 0%, #020617 100%);
+  }
+
+  .dashboard-body {
+    max-width: 1200px;
+    margin: 2rem auto 0;
+    padding: 0 1.5rem;
+  }
+
+  /* Header y Barra Superior */
+  .app-header {
+    border-bottom: 1px solid #1e293b;
+    background-color: rgba(2, 6, 23, 0.8);
+    backdrop-filter: blur(12px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .header-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1.5rem;
+    height: 4.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  /* Logo */
+  .logo-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .logo-icon {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(99, 102, 241, 0.3);
+  }
+
+  .svg-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    color: #ffffff;
+  }
+
+  .logo-text h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(to right, #ffffff, #cbd5e1);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .logo-text p {
+    font-size: 0.725rem;
+    color: #818cf8;
+    font-weight: 500;
+    margin-top: 0.05rem;
+  }
+
+  /* Controles del Header */
+  .controls-container {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .status-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    padding: 0.4rem 0.9rem;
+    border-radius: 9999px;
+  }
+
+  .status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    background-color: #10b981;
+    border-radius: 50%;
+    box-shadow: 0 0 8px #10b981;
+    animation: pulse 2s infinite;
+  }
+
+  .status-text {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #a5b4fc;
+  }
+
+  .btn-refresh {
+    padding: 0.5rem;
+    border-radius: 0.6rem;
+    background-color: #0f172a;
+    border: 1px solid #1e293b;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-refresh:hover {
+    background-color: #1e293b;
+    border-color: #334155;
+  }
+
+  .btn-refresh:active {
+    transform: scale(0.92);
+  }
+
+  .btn-refresh svg {
+    color: #94a3b8;
+    transition: color 0.2s;
+  }
+
+  .btn-refresh:hover svg {
+    color: #ffffff;
+  }
+
+  /* Error Banner */
+  .error-banner {
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    border-radius: 0.85rem;
+    background-color: rgba(244, 63, 94, 0.08);
+    border: 1px solid rgba(244, 63, 94, 0.2);
+    color: #f43f5e;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .error-icon {
+    width: 1.25rem;
+    height: 1.25rem;
+    flex-shrink: 0;
+    margin-top: 0.1rem;
+  }
+
+  .error-title {
+    font-weight: 600;
+    font-size: 0.875rem;
+  }
+
+  .error-desc {
+    font-size: 0.75rem;
+    opacity: 0.85;
+    margin-top: 0.15rem;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    padding: 1.5rem;
+    border-radius: 1rem;
+    background-color: rgba(15, 23, 42, 0.4);
+    border: 1px solid #1e293b;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s, border-color 0.2s;
+  }
+
+  .stat-card:hover {
+    border-color: #334155;
+    transform: translateY(-2px);
+  }
+
+  .stat-title {
+    font-size: 0.725rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+  }
+
+  .stat-value {
+    font-size: 2.25rem;
+    font-weight: 800;
+    color: #ffffff;
+    margin-top: 0.5rem;
+    display: flex;
+    align-items: baseline;
+    gap: 0.2rem;
+    line-height: 1;
+  }
+
+  .stat-unit {
+    font-size: 1.15rem;
+    font-weight: 500;
+    color: #64748b;
+  }
+
+  .stat-icon-bg {
+    position: absolute;
+    right: -0.5rem;
+    bottom: -0.5rem;
+    width: 5.5rem;
+    height: 5.5rem;
+    opacity: 0.03;
+    color: #818cf8;
+    pointer-events: none;
+  }
+
+  /* Records Section / Tabla */
+  .records-section {
+    background-color: rgba(15, 23, 42, 0.2);
+    border: 1px solid #1e293b;
+    border-radius: 1rem;
+    overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  }
+
+  .section-header {
+    padding: 1.5rem;
+    border-b: 1px solid #1e293b;
+    background-color: rgba(15, 23, 42, 0.3);
+  }
+
+  .section-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  .section-subtitle {
+    font-size: 0.725rem;
+    color: #64748b;
+    margin-top: 0.15rem;
+  }
+
+  .table-wrapper {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+  }
+
+  th {
+    padding: 1rem 1.5rem;
+    font-size: 0.725rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #64748b;
+    border-bottom: 1px solid #1e293b;
+    background-color: rgba(2, 6, 23, 0.2);
+  }
+
+  td {
+    padding: 1rem 1.5rem;
+    font-size: 0.875rem;
+    color: #cbd5e1;
+    border-bottom: 1px solid rgba(30, 41, 59, 0.4);
+    transition: background-color 0.2s;
+  }
+
+  tr:hover td {
+    background-color: rgba(99, 102, 241, 0.03);
+  }
+
+  .no-records-msg {
+    padding: 3rem 1.5rem !important;
+    text-align: center;
+    color: #64748b;
+    font-style: italic;
+  }
+
+  .font-dni {
+    font-weight: 600;
+    color: #ffffff;
+    letter-spacing: 0.02em;
+  }
+
+  .font-date {
+    color: #64748b;
+    font-family: var(--font-mono);
+    font-size: 0.775rem;
+    text-align: right;
+  }
+
+  /* Badges de IMC */
+  .bmi-badge-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .bmi-val {
+    font-weight: 700;
+    color: #ffffff;
+    font-size: 0.9rem;
+  }
+
+  .badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.2rem 0.6rem;
+    border-radius: 9999px;
+    border-width: 1px;
+    border-style: solid;
+    letter-spacing: 0.02em;
+  }
+
+  .badge-under {
+    background-color: rgba(59, 130, 246, 0.1);
+    color: #60a5fa;
+    border-color: rgba(59, 130, 246, 0.2);
+  }
+
+  .badge-normal {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.2);
+  }
+
+  .badge-over {
+    background-color: rgba(245, 158, 11, 0.1);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.2);
+  }
+
+  .badge-obese {
+    background-color: rgba(244, 63, 94, 0.1);
+    color: #fb7185;
+    border-color: rgba(244, 63, 94, 0.2);
+  }
+
+  /* Animaciones */
+  @keyframes pulse {
+    0% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5);
+    }
+    70% {
+      transform: scale(1);
+      box-shadow: 0 0 0 6px rgba(16, 185, 129, 0);
+    }
+    100% {
+      transform: scale(0.95);
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+  }
+
+  .spin {
+    animation: rotate 0.6s linear;
+  }
+
+  @keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+
+<script>
+  const refreshBtn = document.getElementById('refresh-btn');
+  const tbody = document.getElementById('records-tbody');
+  
+  const statTotal = document.getElementById('stat-total');
+  const statWeight = document.getElementById('stat-weight');
+  const statHeight = document.getElementById('stat-height');
+  const statBmi = document.getElementById('stat-bmi');
+  const statusText = document.getElementById('status-text');
+
+  function getBmiInfo(bmi: number) {
+    if (bmi < 18.5) return { text: 'Bajo Peso', class: 'badge-under' };
+    if (bmi < 25) return { text: 'Normal', class: 'badge-normal' };
+    if (bmi < 30) return { text: 'Sobrepeso', class: 'badge-over' };
+    return { text: 'Obesidad', class: 'badge-obese' };
+  }
+
+  async function fetchRecords() {
+    try {
+      if (statusText) statusText.textContent = "Actualizando...";
+      const res = await fetch('/api/records');
+      if (!res.ok) throw new Error('Error al consultar registros');
+      const data = await res.json();
+      
+      if (!tbody) return;
+      
+      if (data.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="no-records-msg">
+              No hay registros en la base de datos. ¡Envía datos desde el celular!
+            </td>
+          </tr>
+        `;
+      } else {
+        tbody.innerHTML = data.map((r: any) => {
+          const peso = Number(r.peso);
+          const estatura = Number(r.estatura);
+          const bmi = peso / (estatura * estatura);
+          const bmiInfo = getBmiInfo(bmi);
+          const dateStr = new Date(r.timestamp).toLocaleString('es-ES', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+          });
+
+          return `
+            <tr>
+              <td class="font-dni">${r.dni}</td>
+              <td>${r.edad} años</td>
+              <td>${peso} kg</td>
+              <td>${estatura} m</td>
+              <td>
+                <div class="bmi-badge-container">
+                  <span class="bmi-val">${bmi.toFixed(1)}</span>
+                  <span class="badge ${bmiInfo.class}">
+                    ${bmiInfo.text}
+                  </span>
+                </div>
+              </td>
+              <td class="font-date">${dateStr}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // Actualizar Estadísticas
+      if (data.length > 0) {
+        let total = data.length;
+        let sumWeight = 0;
+        let sumHeight = 0;
+        let sumBmi = 0;
+        
+        data.forEach((r: any) => {
+          const w = Number(r.peso);
+          const h = Number(r.estatura);
+          sumWeight += w;
+          sumHeight += h;
+          sumBmi += w / (h * h);
+        });
+
+        const avgWeight = Math.round((sumWeight / total) * 10) / 10;
+        const avgHeight = Math.round((sumHeight / total) * 100) / 100;
+        const avgBmi = Math.round((sumBmi / total) * 10) / 10;
+
+        if (statTotal) statTotal.textContent = String(total);
+        if (statWeight) statWeight.innerHTML = `${avgWeight} <span class="stat-unit">kg</span>`;
+        if (statHeight) statHeight.innerHTML = `${avgHeight} <span class="stat-unit">m</span>`;
+        if (statBmi) statBmi.textContent = String(avgBmi);
+      }
+      
+      if (statusText) statusText.textContent = "Escuchando";
+    } catch (err) {
+      console.error('Error fetching records:', err);
+      if (statusText) statusText.textContent = "Error";
+    }
+  }
+
+  // Escuchar botón de refresh
+  refreshBtn?.addEventListener('click', () => {
+    refreshBtn.classList.add('spin');
+    fetchRecords().finally(() => {
+      setTimeout(() => refreshBtn.classList.remove('spin'), 600);
+    });
+  });
+
+  // Polling cada 4 segundos
+  setInterval(fetchRecords, 4000);
+</script>

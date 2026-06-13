@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Control - Emulador ESP32</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-hover: #4f46e5;
+            --bg-dark: #090d16;
+            --card-bg: #111827;
+            --border: #1f2937;
+            --text-light: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 1.5rem;
+            background-image: radial-gradient(circle at top, #1e1b4b 0%, #090d16 100%);
+        }
+
+        .container {
+            width: 100%;
+            max-width: 460px;
+            background-color: rgba(17, 24, 39, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border);
+            border-radius: 1.5rem;
+            padding: 2.25rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .logo {
+            width: 3.5rem;
+            height: 3.5rem;
+            border-radius: 1rem;
+            background: linear-gradient(135deg, #a78bfa 0%, var(--primary) 100%);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1rem;
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .logo svg {
+            width: 1.75rem;
+            height: 1.75rem;
+            color: white;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.25rem;
+            background: linear-gradient(to right, #ffffff, #cbd5e1);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .subtitle {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* Display de valores actuales */
+        .current-display {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .value-card {
+            background-color: rgba(31, 41, 55, 0.3);
+            border: 1px solid var(--border);
+            border-radius: 1rem;
+            padding: 1rem;
+            text-align: center;
+        }
+
+        .value-card label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+        }
+
+        .value-card .value {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: white;
+            margin-top: 0.25rem;
+        }
+
+        .value-card .unit {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+        }
+
+        /* Formulario de Input */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .label-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            color: var(--text-light);
+        }
+
+        .input-badge {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: var(--primary);
+            background-color: rgba(99, 102, 241, 0.1);
+            padding: 0.15rem 0.5rem;
+            border-radius: 0.5rem;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        input[type="number"] {
+            width: 100%;
+            background-color: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 0.75rem;
+            padding: 0.75rem 1rem;
+            color: white;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 600;
+            outline: none;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+        }
+
+        .slider {
+            width: 100%;
+            height: 6px;
+            background: #1f2937;
+            border-radius: 3px;
+            outline: none;
+            margin-top: 0.75rem;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        .btn-submit {
+            width: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--primary-hover) 100%);
+            border: none;
+            border-radius: 0.75rem;
+            padding: 0.9rem;
+            color: white;
+            font-family: inherit;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 2rem;
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-submit:active {
+            transform: translateY(1px);
+        }
+
+        /* Notificación */
+        .toast {
+            position: fixed;
+            bottom: 2rem;
+            left: 50%;
+            transform: translateX(-50%) translateY(100px);
+            background-color: #10b981;
+            color: white;
+            font-weight: 600;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 25px rgba(16, 185, 129, 0.3);
+            font-size: 0.875rem;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            z-index: 1000;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .toast-error {
+            background-color: #f43f5e;
+            box-shadow: 0 10px 25px rgba(244, 63, 94, 0.3);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                </svg>
+            </div>
+            <h1>Emulador ESP32</h1>
+            <p class="subtitle">Panel de Simulación de Sensores de Salud</p>
+        </div>
+
+        <!-- Valores Actuales -->
+        <div class="current-display">
+            <div class="value-card">
+                <label>Peso Actual</label>
+                <div class="value"><span id="curr-peso">--</span> <span class="unit">kg</span></div>
+            </div>
+            <div class="value-card">
+                <label>Estatura Actual</label>
+                <div class="value"><span id="curr-estatura">--</span> <span class="unit">m</span></div>
+            </div>
+        </div>
+
+        <!-- Formulario -->
+        <form id="emulator-form">
+            <!-- Peso -->
+            <div class="form-group">
+                <div class="label-container">
+                    <label for="peso-input">Peso del Paciente</label>
+                    <span class="input-badge" id="peso-badge">75 kg</span>
+                </div>
+                <input type="number" id="peso-input" step="0.1" min="30" max="200" value="75">
+                <input type="range" id="peso-slider" class="slider" min="30" max="200" step="0.5" value="75">
+            </div>
+
+            <!-- Estatura -->
+            <div class="form-group">
+                <div class="label-container">
+                    <label for="estatura-input">Estatura del Paciente</label>
+                    <span class="input-badge" id="estatura-badge">1.75 m</span>
+                </div>
+                <input type="number" id="estatura-input" step="0.01" min="1.0" max="2.2" value="1.75">
+                <input type="range" id="estatura-slider" class="slider" min="100" max="220" step="1" value="175">
+            </div>
+
+            <button type="submit" class="btn-submit">
+                <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071a10.5 10.5 0 0114.14 0M1.414 6.586a17 17 0 0121.172 0" />
+                </svg>
+                Transmitir Valores (BLE/Wi-Fi)
+            </button>
+        </form>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="toast">
+        <svg xmlns="http://www.w3.org/2000/svg" style="width: 1.25rem; height: 1.25rem;" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        <span>Valores actualizados en el ESP32</span>
+    </div>
+
+    <script>
+        const pesoInput = document.getElementById('peso-input');
+        const pesoSlider = document.getElementById('peso-slider');
+        const pesoBadge = document.getElementById('peso-badge');
+        
+        const estaturaInput = document.getElementById('estatura-input');
+        const estaturaSlider = document.getElementById('estatura-slider');
+        const estaturaBadge = document.getElementById('estatura-badge');
+
+        const currPeso = document.getElementById('curr-peso');
+        const currEstatura = document.getElementById('curr-estatura');
+        
+        const form = document.getElementById('emulator-form');
+        const toast = document.getElementById('toast');
+
+        // URL de la API local del emulador
+        const API_URL = '/api/data';
+
+        // Cargar datos actuales del servidor
+        async function loadCurrentData() {
+            try {
+                const res = await fetch(API_URL);
+                if (res.ok) {
+                    const data = await res.json();
+                    updateUI(data.peso, data.estatura);
+                }
+            } catch (err) {
+                console.error("No se pudo cargar datos actuales del emulador:", err);
+            }
+        }
+
+        function updateUI(peso, estatura) {
+            currPeso.textContent = peso.toFixed(1);
+            currEstatura.textContent = estatura.toFixed(2);
+            
+            // Sincronizar inputs
+            pesoInput.value = peso;
+            pesoSlider.value = peso;
+            pesoBadge.textContent = `${peso} kg`;
+            
+            estaturaInput.value = estatura;
+            // El slider de estatura está en cm (100 a 220) para mejor control
+            estaturaSlider.value = Math.round(estatura * 100);
+            estaturaBadge.textContent = `${estatura.toFixed(2)} m`;
+        }
+
+        // Event Listeners para Peso
+        pesoInput.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value) || 70;
+            if (val < 30) val = 30;
+            if (val > 200) val = 200;
+            pesoSlider.value = val;
+            pesoBadge.textContent = `${val} kg`;
+        });
+
+        pesoSlider.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            pesoInput.value = val;
+            pesoBadge.textContent = `${val} kg`;
+        });
+
+        // Event Listeners para Estatura
+        estaturaInput.addEventListener('input', (e) => {
+            let val = parseFloat(e.target.value) || 1.70;
+            if (val < 1.0) val = 1.0;
+            if (val > 2.2) val = 2.2;
+            estaturaSlider.value = Math.round(val * 100);
+            estaturaBadge.textContent = `${val.toFixed(2)} m`;
+        });
+
+        estaturaSlider.addEventListener('input', (e) => {
+            const valCm = parseInt(e.target.value);
+            const valM = valCm / 100;
+            estaturaInput.value = valM.toFixed(2);
+            estaturaBadge.textContent = `${valM.toFixed(2)} m`;
+        });
+
+        // Envío de Formulario
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const peso = parseFloat(pesoInput.value);
+            const estatura = parseFloat(estaturaInput.value);
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ peso, estatura })
+                });
+
+                if (res.ok) {
+                    const result = await res.json();
+                    updateUI(result.data.peso, result.data.estatura);
+                    showToast(false, "ESP32 actualizado. Transmitiendo...");
+                } else {
+                    showToast(true, "Error al actualizar el emulador");
+                }
+            } catch (err) {
+                showToast(true, "Error de red al conectar al emulador");
+            }
+        });
+
+        function showToast(isError, message) {
+            toast.textContent = message;
+            if (isError) {
+                toast.classList.add('toast-error');
+            } else {
+                toast.classList.remove('toast-error');
+            }
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // Inicializar
+        loadCurrentData();
+    </script>
+</body>
+</html>
