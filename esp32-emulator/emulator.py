@@ -2,6 +2,8 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "bless",
+#     "bleak",
+#     "pysetupdi @ git+https://github.com/gwangyi/pysetupdi",
 # ]
 # ///
 
@@ -11,6 +13,93 @@ import sys
 import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
+
+# Shims for Windows BLE support in Python 3.13
+if sys.platform == "win32":
+    import types
+    try:
+        import winrt
+        import winrt.windows.devices.bluetooth
+        import winrt.windows.devices.bluetooth.genericattributeprofile
+        import winrt.windows.devices.bluetooth.advertisement
+        import winrt.windows.foundation
+        import winrt.windows.storage.streams
+        
+        sys.modules['bleak_winrt'] = winrt
+        sys.modules['bleak_winrt.windows'] = winrt.windows
+        sys.modules['bleak_winrt.windows.devices'] = winrt.windows.devices
+        sys.modules['bleak_winrt.windows.devices.bluetooth'] = winrt.windows.devices.bluetooth
+        sys.modules['bleak_winrt.windows.devices.bluetooth.genericattributeprofile'] = winrt.windows.devices.bluetooth.genericattributeprofile
+        sys.modules['bleak_winrt.windows.devices.bluetooth.advertisement'] = winrt.windows.devices.bluetooth.advertisement
+        sys.modules['bleak_winrt.windows.foundation'] = winrt.windows.foundation
+        sys.modules['bleak_winrt.windows.storage'] = winrt.windows.storage
+        sys.modules['bleak_winrt.windows.storage.streams'] = winrt.windows.storage.streams
+    except ImportError:
+        pass
+
+    try:
+        import bleak.backends.service
+        import bleak.backends.characteristic
+        
+        _handle_counter = 1
+        class MockBleakGATTServiceWinRT(bleak.backends.service.BleakGATTService):
+            def __init__(self, *args, **kwargs):
+                uuid = args[0] if args else (kwargs.get('uuid') or '00000000-0000-0000-0000-000000000000')
+                self.obj = None
+                self._handle = 0
+                if not hasattr(self, '_uuid'):
+                    self._uuid = str(uuid)
+                self._characteristics = {}
+
+        class MockBleakGATTCharacteristicWinRT(bleak.backends.characteristic.BleakGATTCharacteristic):
+            def __init__(self, *args, **kwargs):
+                obj = kwargs.get('obj') or (args[0] if args else None)
+                self.obj = obj
+                global _handle_counter
+                self._handle = _handle_counter
+                _handle_counter += 1
+                if not hasattr(self, '_uuid'):
+                    self._uuid = '00000000-0000-0000-0000-000000000000'
+                self._properties = []
+                self._max_write_without_response_size = kwargs.get('max_write_without_response_size') or 128
+                self._service = None
+                self._descriptors = {}
+
+        bleak_winrt_service_mock = types.ModuleType('bleak.backends.winrt.service')
+        bleak_winrt_service_mock.BleakGATTServiceWinRT = MockBleakGATTServiceWinRT
+        sys.modules['bleak.backends.winrt.service'] = bleak_winrt_service_mock
+        
+        bleak_winrt_char_mock = types.ModuleType('bleak.backends.winrt.characteristic')
+        bleak_winrt_char_mock.BleakGATTCharacteristicWinRT = MockBleakGATTCharacteristicWinRT
+        sys.modules['bleak.backends.winrt.characteristic'] = bleak_winrt_char_mock
+    except Exception:
+        pass
+
+    # Patch BlessServerWinRT start method
+    try:
+        from bless.backends.winrt.server import BlessServerWinRT
+        from winrt.windows.devices.bluetooth.genericattributeprofile import GattServiceProviderAdvertisingParameters
+        
+        async def patched_start(self: BlessServerWinRT, **kwargs):
+            if self._name_overwrite:
+                self._adapter.set_local_name(self.name)
+            adv_parameters = GattServiceProviderAdvertisingParameters()
+            adv_parameters.is_discoverable = True
+            adv_parameters.is_connectable = True
+            for uuid, service in self.services.items():
+                if hasattr(service.service_provider, 'start_advertising_with_parameters'):
+                    service.service_provider.start_advertising_with_parameters(adv_parameters)
+                else:
+                    try:
+                        service.service_provider.start_advertising(adv_parameters)
+                    except TypeError:
+                        service.service_provider.start_advertising()
+            self._advertising = True
+            self._advertising_started.set()
+
+        BlessServerWinRT.start = patched_start
+    except Exception:
+        pass
 
 # UUIDs de Servicio y Características (Estándar de 128 bits)
 SERVICE_UUID = "12345678-1234-5678-1234-567812345678"
@@ -37,9 +126,10 @@ try:
     )
     import asyncio
     BLE_SUPPORTED = True
-except ImportError:
-    print("[WARN] Librería 'bless' no encontrada. El soporte Bluetooth BLE no estará disponible.")
-    print("       Puedes instalarla usando: pip install bless")
+except ImportError as ie:
+    import traceback
+    print(f"[WARN] Error al importar 'bless': {ie}")
+    traceback.print_exc()
     print("       El emulador continuará funcionando en modo Wi-Fi (HTTP API).")
     BLE_SUPPORTED = False
 
@@ -149,13 +239,18 @@ async def update_ble_async():
         peso_bytes = bytearray(str(device_data["peso"]).encode('utf-8'))
         estatura_bytes = bytearray(str(device_data["estatura"]).encode('utf-8'))
         
-        # Actualizar valores
-        ble_server.write_value(WEIGHT_CHAR_UUID, peso_bytes)
-        ble_server.write_value(HEIGHT_CHAR_UUID, estatura_bytes)
+        # Actualizar valores en los objetos de característica
+        weight_char = ble_server.get_characteristic(WEIGHT_CHAR_UUID)
+        if weight_char:
+            weight_char.value = peso_bytes
+            
+        height_char = ble_server.get_characteristic(HEIGHT_CHAR_UUID)
+        if height_char:
+            height_char.value = estatura_bytes
         
         # Disparar notificaciones a los clientes suscritos
-        await ble_server.update_value(SERVICE_UUID, WEIGHT_CHAR_UUID)
-        await ble_server.update_value(SERVICE_UUID, HEIGHT_CHAR_UUID)
+        ble_server.update_value(SERVICE_UUID, WEIGHT_CHAR_UUID)
+        ble_server.update_value(SERVICE_UUID, HEIGHT_CHAR_UUID)
         print(f"[BLE ANUNCIANDO] Peso={device_data['peso']} | Estatura={device_data['estatura']} (Notificado)")
     except Exception as e:
         print(f"[BLE ERROR] Fallo al actualizar valores GATT: {e}")
@@ -187,19 +282,19 @@ async def start_ble_server():
         
         # Registrar Característica de Peso (Lectura + Notificaciones)
         await ble_server.add_new_characteristic(
-            SERVICE_UUID,
-            WEIGHT_CHAR_UUID,
-            GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
-            GATTAttributePermissions.readable,
+            service_uuid=SERVICE_UUID,
+            char_uuid=WEIGHT_CHAR_UUID,
+            properties=GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
+            permissions=GATTAttributePermissions.readable,
             value=bytearray(str(device_data["peso"]).encode('utf-8'))
         )
         
         # Registrar Característica de Estatura (Lectura + Notificaciones)
         await ble_server.add_new_characteristic(
-            SERVICE_UUID,
-            HEIGHT_CHAR_UUID,
-            GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
-            GATTAttributePermissions.readable,
+            service_uuid=SERVICE_UUID,
+            char_uuid=HEIGHT_CHAR_UUID,
+            properties=GATTCharacteristicProperties.read | GATTCharacteristicProperties.notify,
+            permissions=GATTAttributePermissions.readable,
             value=bytearray(str(device_data["estatura"]).encode('utf-8'))
         )
         
