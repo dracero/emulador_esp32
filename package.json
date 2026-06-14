@@ -1,0 +1,8 @@
+{
+  "name": "sistema-monitoreo-salud",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "npx -y concurrently --kill-others -n \"astro,esp32\" -c \"bgBlue,bgGreen\" \"npm run dev --prefix backend-astro\" \"uv run esp32-emulator/emulator.py\""
+  }
+}

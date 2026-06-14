@@ -1,3 +1,10 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "bless",
+# ]
+# ///
+
 import json
 import os
 import sys
